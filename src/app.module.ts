@@ -3,8 +3,19 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { MyFistController } from './controllers/my-fist/my-fist.controller';
+import { MyFirstController } from './controllers/my-first/my-first.controller';
 import { BankAccount } from './models/bank-account.model';
+import { BankAccountController } from './controllers/bank-account/bank-account.controller';
+import { ConsoleModule } from 'nestjs-console';
+import { FixturesCommand } from './fixtures/fixtures.command';
+import { PixKeyController } from './controllers/pix-key/pix-key.controller';
+import { PixKey } from './models/pix-key.model';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { join } from 'path';
+import { TransactionController } from './controllers/transaction/transaction.controller';
+import { Transaction } from './models/transaction.model';
+import { TransactionSubscriber } from './subscribers/transaction-subscriber/transaction-subscriber.service';
+import { TransactionController } from './controllers/transaction/transaction.controller';
 
 @Module({
   imports: [
@@ -17,11 +28,40 @@ import { BankAccount } from './models/bank-account.model';
       username: process.env.TYPEORM_USERNAME,
       password: process.env.TYPEORM_PASSWORD,
       database: process.env.TYPEORM_DATABASE,
-      entities: [BankAccount]
+      entities: [BankAccount, PixKey, Transaction]
     }),
-    TypeOrmModule.forFeature([BankAccount]),
+    TypeOrmModule.forFeature([BankAccount, PixKey, Transaction]),
+    ClientsModule.register([
+      {
+        name: 'CODEPIX_PACKAGE',
+        transport: Transport.GRPC,
+        options: {
+          url: process.env.GRPC_URL,
+          package: 'github.com.osmariojunior.codepix',
+          protoPath: [join(__dirname, 'protofiles/pixkey.proto')]
+        }
+      }
+    ]),
+    ClientsModule.register([
+      {
+        name: 'TRANSACTION_SERVICE',
+        transport: Transport.KAFKA,
+        options: {
+          client: {
+            clientId: process.env.KAFKA_CLIENT_ID,
+            brokers: [process.env.KAFKA_BROKER]
+          },
+          consumer: {
+            groupId: !process.env.KAFKA_CONSUMER_GROUP_ID ||
+              process.env.KAFKA_CONSUMER_GROUP_ID === ''
+                ? 'my-consumer-' + Math.random()
+                : process.env.KAFKA_CONSUMER_GROUP_ID,
+          }
+        }
+      }
+    ])
   ],
-  controllers: [AppController, MyFistController],
-  providers: [AppService],
+  controllers: [AppController, MyFirstController, BankAccountController, PixKeyController, TransactionController],
+  providers: [AppService, FixturesCommand, TransactionSubscriber],
 })
 export class AppModule {}
